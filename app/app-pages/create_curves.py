@@ -256,7 +256,7 @@ def ask_chatgpt_for_knot_tweaks(fig, previous_response_text):
 
 
 # Bridging forward curve
-def bootstrap_forward_curve(df_curve, long_term_rate, max_slope, extension_freq, min_extension_years, curve_max_extension):
+def bridge_forward_curve(df_curve, long_term_rate, max_slope, extension_freq, min_extension_years, curve_max_extension):
     df_extended = ModellingFunctions.bridge_forward_curve_to_longterm(
         df_curve = df_curve,
         term_col = "term_yr",
@@ -287,7 +287,8 @@ def bootstrap_forward_curve(df_curve, long_term_rate, max_slope, extension_freq,
 st.set_page_config(layout="wide")
 st.title("🧮 Create Risk-free Discount Curve")
 
-st.subheader("Bootstrapping of zero-coupon forward rates")
+st.divider()
+st.subheader("Step 1 - Bootstrapping of zero-coupon forward rates")
 st.markdown("""
 The one-month forward rate is determined from the Overnight Cash Rate (OCR).
 
@@ -323,6 +324,16 @@ if st.button("🚀 Run Forward Bootstrapping"):
     except Exception as e:
         st.error(f"Bootstrapping failed: {e}")
 
+st.divider()
+st.subheader("Step 2 - Cubic Spline Curve Fitting")
+st.markdown("""
+The process is to fit a curve of forward rates to the zero-coupon portfolio of available bonds. The parameters of the fitted curve are determined by solving to minimize the least squares differences of the resulting fitted spot rates with the actual market spot rates. Two-, three- and six-month Treasury bill rates are used in addition to nominal Government bonds.
+
+Market yields are weighted by the lesser of the amount available in the market, which excludes the amounts held by the Reserve Bank of New Zealand (RBNZ) and the Earthquake Commission (which is not usually traded) and $4 billion. This means that implied forward rates automatically give less weight to those bonds which represent a smaller proportion of the tradeable market.
+
+The curve fitted is a cubic spline on the forward rates with 4 knots. This is fairly standard methodology with enough flexibility to fit most yield curves. There is some judgment involved in selecting the position of the knots, but this also gives a little flexibility to cope with any anomalies that may be present in the yield curve without changing the fundamental principles.            
+""")
+
 fig = st.session_state.get("bootstrapped_fig", None)
 data = st.session_state.get("bootstrapped_data", None)
 
@@ -345,14 +356,6 @@ if fig and st.button("🧠 Ask ChatGPT for Knot Placement Advice"):
         else:
             st.error("Could not extract 4 valid knot values from the response.")
 
-st.subheader("📐 Cubic Spline Curve Fitting")
-st.markdown("""
-The process is to fit a curve of forward rates to the zero-coupon portfolio of available bonds. The parameters of the fitted curve are determined by solving to minimize the least squares differences of the resulting fitted spot rates with the actual market spot rates. Two-, three- and six-month Treasury bill rates are used in addition to nominal Government bonds.
-
-Market yields are weighted by the lesser of the amount available in the market, which excludes the amounts held by the Reserve Bank of New Zealand (RBNZ) and the Earthquake Commission (which is not usually traded) and $4 billion. This means that implied forward rates automatically give less weight to those bonds which represent a smaller proportion of the tradeable market.
-
-The curve fitted is a cubic spline on the forward rates with 4 knots. This is fairly standard methodology with enough flexibility to fit most yield curves. There is some judgment involved in selecting the position of the knots, but this also gives a little flexibility to cope with any anomalies that may be present in the yield curve without changing the fundamental principles.            
-""")
 if st.button("🚀 Run Cubic Spline Fitting"):
     try:
         knots = st.session_state.get("spline_knots", None)
@@ -423,7 +426,8 @@ with col2:
             st.error("❌ Invalid input. Make sure to enter numbers separated by commas.")
 
 
-st.subheader("📐 Apply Bridging to Long-term Assumption")
+st.divider()
+st.subheader("Step 3 - Apply Bridging to Long-term Assumption")
 st.markdown("""
 Bridging is required from the last observable market data point, out to a long-term assumption. The methodology applies linear interpolation over a defined period from the maturity date of the last nominal Government bond, subject to a defined maximum slope.
 """)
@@ -448,7 +452,7 @@ with left_col:
 with right_col:
     if run_bridging:
         try:
-            result_df = bootstrap_forward_curve(df_curve, long_term_rate, bridging_max_slope, bridging_extension_freq, bridging_min_extension_years, curve_max_extension)
+            result_df = bridge_forward_curve(df_curve, long_term_rate, bridging_max_slope, bridging_extension_freq, bridging_min_extension_years, curve_max_extension)
 
             st.success("✅ Bridging completed!")
             fig = plot_forward_curve(result_df,
