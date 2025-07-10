@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import scipy
+
 from scipy.interpolate import CubicSpline
 from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import minimize

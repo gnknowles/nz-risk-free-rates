@@ -4,6 +4,12 @@ import plotly.graph_objects as go
 import os
 
 # --------------------
+# Page Setup
+# --------------------
+st.set_page_config(layout="wide")
+st.title("Select assets to use in discount curve")
+
+# --------------------
 # Load Data
 # --------------------
 rbnz_file = os.path.abspath("../data/003_rbnz_yields_transformed.csv")
@@ -22,18 +28,13 @@ except Exception as e:
     df_nzdm = pd.DataFrame()
 
 # --------------------
-# Page Setup
-# --------------------
-st.set_page_config(layout="wide")
-st.title("Select assets to use in discount curve")
-
-# --------------------
 # 1. RBNZ Date Filter
 # --------------------
 available_dates = sorted(df_rbnz["date"].dt.date.unique())
+default_rbnz_date = st.session_state.get("selected_rbnz_date", max(available_dates))
 selected_date = st.date_input(
     "📅 Select RBNZ Valuation Date:",
-    value=max(available_dates),
+    value=default_rbnz_date,
     min_value=min(available_dates),
     max_value=max(available_dates),
 )
@@ -48,11 +49,13 @@ if df_rbnz_filtered.empty:
 # 2. Group & Series Filters
 # --------------------
 group_options = sorted(df_rbnz_filtered["group"].dropna().unique())
-selected_groups = st.multiselect("🔹 Filter by Group(s):", group_options, default=group_options)
+default_groups = st.session_state.get("selected_groups", group_options)
+selected_groups = st.multiselect("🔹 Filter by Group(s):", group_options, default=default_groups)
 df_rbnz_filtered = df_rbnz_filtered[df_rbnz_filtered["group"].isin(selected_groups)]
 
 series_options = sorted(df_rbnz_filtered["series"].dropna().unique())
-selected_series = st.multiselect("🔹 Filter by Series:", series_options, default=series_options)
+default_series = st.session_state.get("selected_series", series_options)
+selected_series = st.multiselect("🔹 Filter by Series:", series_options, default=default_series)
 df_rbnz_filtered = df_rbnz_filtered[df_rbnz_filtered["series"].isin(selected_series)]
 
 # --------------------
@@ -63,10 +66,11 @@ series_label_map = {
     for _, row in df_rbnz_filtered.drop_duplicates(subset="series_id").iterrows()
 }
 
+default_series_ids = st.session_state.get("selected_series_ids", list(series_label_map.keys()))
 selected_series_ids = st.multiselect(
     "📌 Select Asset(s) (Series IDs):",
     options=list(series_label_map.keys()),
-    default=list(series_label_map.keys()),
+    default=default_series_ids,
     format_func=lambda sid: series_label_map[sid],
 )
 
@@ -81,11 +85,18 @@ if st.button("✅ Confirm Selection"):
         confirmed = True
         st.success(f"{len(selected_series_ids)} asset(s) selected.")
 
+        # Save to session state
+        st.session_state["selected_series_ids"] = selected_series_ids
+        st.session_state["selected_rbnz_date"] = selected_date
+        st.session_state["selected_groups"] = selected_groups
+        st.session_state["selected_series"] = selected_series
+
 # --------------------
 # 5. Display RBNZ Table and Plot
 # --------------------
-if confirmed and selected_series_ids:
+if selected_series_ids:
     result_df = df_rbnz_filtered[df_rbnz_filtered["series_id"].isin(selected_series_ids)]
+    st.session_state["rbnz_filtered"] = result_df
 
     st.markdown("### 📄 Filtered RBNZ Data")
     st.dataframe(result_df, use_container_width=True)
@@ -117,23 +128,26 @@ if confirmed and selected_series_ids:
 # --------------------
 # 6. NZDM Integration
 # --------------------
-if confirmed and not df_nzdm.empty and selected_series_ids:
+df_nzdm_filtered = None
+
+if not df_nzdm.empty and selected_series_ids:
     st.markdown("---")
     st.subheader("🏛️ NZDM Market Bonds")
 
     df_nzdm_filtered = df_nzdm[df_nzdm["series_id"].isin(selected_series_ids)]
 
     available_nzdm_dates = sorted(df_nzdm_filtered["as_of_date"].dt.date.unique())
-    if not available_nzdm_dates:
-        st.info("No NZDM data available for selected assets.")
-    else:
+    if available_nzdm_dates:
+        default_nzdm_date = st.session_state.get("selected_nzdm_date", max(available_nzdm_dates))
         selected_nzdm_date = st.date_input(
             "📅 Select NZDM Valuation Date:",
-            value=max(available_nzdm_dates),
+            value=default_nzdm_date,
             min_value=min(available_nzdm_dates),
             max_value=max(available_nzdm_dates),
             key="nzdm_date_input"
         )
+
+        st.session_state["selected_nzdm_date"] = selected_nzdm_date
 
         df_nzdm_filtered = df_nzdm_filtered[df_nzdm_filtered["as_of_date"].dt.date == selected_nzdm_date]
 
@@ -141,6 +155,8 @@ if confirmed and not df_nzdm.empty and selected_series_ids:
             df_nzdm_filtered["term_yr"] = (
                 (df_nzdm_filtered["maturity"] - pd.to_datetime(selected_nzdm_date)).dt.days / 365.25
             )
+
+            st.session_state["nzdm_filtered"] = df_nzdm_filtered
 
             st.markdown("### 🧾 Filtered NZDM Data")
             st.dataframe(df_nzdm_filtered, use_container_width=True)
@@ -169,5 +185,5 @@ if confirmed and not df_nzdm.empty and selected_series_ids:
                 st.warning("Missing required columns for NZDM plotting.")
         else:
             st.info("No NZDM data available for the selected date.")
-elif confirmed:
-    st.info("NZDM dataset not available or no matching data for selected series.")
+    else:
+        st.info("No NZDM data available for selected assets.")

@@ -1,4 +1,19 @@
 import streamlit as st
+import os
+import sys
+
+def load_local_environment():
+    """
+    Load local environment variables from .env file
+    """
+    from dotenv import load_dotenv
+
+    if os.path.exists(".env"):
+        load_dotenv(".env", override=True)
+    
+    else:
+        raise Exception("WARNING | No local .env file found - ensure you are running from app/ and have a .env file in app/")
+
 
 # Set up pages
 home_page = st.Page(
@@ -15,27 +30,31 @@ data_page = st.Page(
     url_path="data_select"
 )
 
-tool_page = st.Page(
-    page="app-pages/page1.py",
-    title="Tool",
+curves_page = st.Page(
+    page="app-pages/create_curves.py",
+    title="Create Yield Curves",
     icon="📅",
-    url_path="riskfree_run_tool"
+    url_path="create_curves"
 )
 
-pages = [home_page, data_page, tool_page]
+
+pages = [home_page, data_page, curves_page]
 
 pages_nav = {
     "Welcome": [
         home_page
     ],
     "Tool Pages": [
-        data_page, tool_page
+        data_page, curves_page
     ]
 }
 
-layouts = ["centered", "centered", "centered"]
+layouts = ["centered", "centered", "centered", "centered"]
 
 # Setup Navigation
 pg = st.navigation(pages=pages_nav, position="sidebar", expanded=True)
+
+
+load_local_environment()
 
 pg.run()
